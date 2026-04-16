@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Patient;
-use App\Models\Monitoring;
+use App\Models\Monitoring; 
 
 class MonitoringController extends Controller
 {
@@ -36,7 +36,7 @@ class MonitoringController extends Controller
         // Filter berdasarkan pencarian nama atau ID pasien
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
+                $q->where('nama', 'like', "%{$search}%")
                   ->orWhere('patient_id', 'like', "%{$search}%");
             });
         }
@@ -82,8 +82,7 @@ class MonitoringController extends Controller
                     $estimatedTimeText = $remainingHours . ' jam ' . $remainingMins . ' menit lagi';
                 }
             }
-            
-            // Tentukan status badge
+
             $status = $latestMonitoring->status ?? 'normal';
             $statusBadge = $this->getStatusBadge($status);
             
@@ -118,9 +117,7 @@ class MonitoringController extends Controller
         ]);
     }
     
-    /**
-     * Get statistics for dashboard cards
-     */
+
     public function stats()
     {
         $totalPatients = Patient::count();
@@ -129,8 +126,7 @@ class MonitoringController extends Controller
         $activeInfusions = Patient::whereHas('latestMonitoring', function ($q) {
             $q->whereNotIn('status', ['empty', 'stuck']);
         })->count();
-        
-        // Hitung volume rendah (remaining < 50ml atau < 20%)
+
         $lowVolume = 0;
         $patients = Patient::with('latestMonitoring')->get();
         foreach ($patients as $patient) {
@@ -142,8 +138,7 @@ class MonitoringController extends Controller
                 }
             }
         }
-        
-        // Hitung anomali (status bukan normal)
+
         $anomalyCount = Patient::whereHas('latestMonitoring', function ($q) {
             $q->where('status', '!=', 'normal');
         })->count();
@@ -156,10 +151,8 @@ class MonitoringController extends Controller
             'anomaly_count' => $anomalyCount,
         ]);
     }
-    
-    /**
-     * Get real-time monitoring data for a specific patient
-     */
+
+
     public function getRealTimeData($patientId)
     {
         $patient = Patient::with('monitorings')->findOrFail($patientId);
@@ -188,9 +181,6 @@ class MonitoringController extends Controller
         ]);
     }
     
-    /**
-     * Export monitoring data to CSV
-     */
     public function export(Request $request)
     {
         $status = $request->get('status', 'all');
@@ -243,7 +233,7 @@ class MonitoringController extends Controller
             
             fputcsv($handle, [
                 $no++,
-                $patient->name,
+                $patient->nama,
                 $patient->patient_id,
                 $patient->room,
                 $patient->bed_number,

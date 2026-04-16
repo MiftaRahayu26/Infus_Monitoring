@@ -21,7 +21,7 @@ class PatientController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
+            'nama' => 'required|string|max:255',
             'patient_id' => 'required|string|max:50|unique:patients',
             'room' => 'nullable|string|max:50',
             'bed_number' => 'nullable|string|max:10',
@@ -33,18 +33,15 @@ class PatientController extends Controller
             'device_key' => 'nullable|string|max:100'
         ]);
 
-        // Hitung volume awal (dalam ml)
         $initialVolume = $request->initial_volume;
         
-        // Hitung target TPM jika tidak dikirim
         $targetTpm = $request->target_tpm;
-        if (!$targetTpm && $request->initial_volume && $request->drop_factor && $request->duration_hours) {
+        if (!$targetTpm) {
             $targetTpm = round(($request->initial_volume * $request->drop_factor) / ($request->duration_hours * 60));
         }
 
-        // Simpan ke tabel patients
         $patient = Patient::create([
-            'name' => $request->name,
+            'name' => $request->name,              
             'patient_id' => $request->patient_id,
             'room' => $request->room ?? '-',
             'bed_number' => $request->bed_number ?? '-',
@@ -57,7 +54,6 @@ class PatientController extends Controller
             'user_id' => auth()->id(),
         ]);
 
-        // Buat data monitoring awal
         Monitoring::create([
             'patient_id' => $patient->id,
             'total_drops' => 0,
@@ -77,10 +73,9 @@ class PatientController extends Controller
 
     public function show($id)
     {
-        $patient = Patient::with('Monitorings')->findOrFail($id);
+        $patient = Patient::with('monitorings')->findOrFail($id);
         
-        // Hitung sisa volume persentase
-        $latestMonitoring = $patient->Monitorings()->latest('recorded_at')->first();
+        $latestMonitoring = $patient->monitorings()->latest('recorded_at')->first();
         $remainingPercent = 0;
         $remainingMl = 0;
         
@@ -89,7 +84,6 @@ class PatientController extends Controller
             $remainingPercent = round(($remainingMl / $patient->initial_volume) * 100);
         }
         
-        // Hitung estimasi waktu selesai
         $startTime = $patient->created_at;
         $endTime = $startTime->copy()->addHours($patient->duration_hours);
         $now = now();
@@ -101,7 +95,7 @@ class PatientController extends Controller
             'success' => true,
             'data' => [
                 'id' => $patient->id,
-                'name' => $patient->name,
+                'name' => $patient->nama,          
                 'patient_id' => $patient->patient_id,
                 'room' => $patient->room,
                 'bed_number' => $patient->bed_number,
@@ -119,7 +113,7 @@ class PatientController extends Controller
                 'end_time' => $endTime->format('Y-m-d H:i:s'),
                 'remaining_time' => $remainingTimeText,
                 'is_finished' => $isFinished,
-                'monitoring_history' => $patient->Monitorings()->take(10)->get()
+                'monitoring_history' => $patient->monitorings()->take(10)->get()
             ]
         ]);
     }
@@ -129,7 +123,7 @@ class PatientController extends Controller
         $patient = Patient::findOrFail($id);
         
         $request->validate([
-            'name' => 'sometimes|string|max:255',
+            'name' => 'sometimes|string|max:255', 
             'room' => 'nullable|string|max:50',
             'bed_number' => 'nullable|string|max:10',
             'infusion_type' => 'sometimes|string',
@@ -138,11 +132,17 @@ class PatientController extends Controller
             'target_tpm' => 'sometimes|integer',
             'device_key' => 'nullable|string|max:100'
         ]);
-        
-        $patient->update($request->only([
-            'name', 'room', 'bed_number', 'infusion_type', 
+
+        $updateData = $request->only([
+            'room', 'bed_number', 'infusion_type', 
             'drop_factor', 'duration_hours', 'target_tpm', 'device_key'
-        ]));
+        ]);
+        
+        if ($request->has('name')) {
+            $updateData['nama'] = $request->name; 
+        }
+        
+        $patient->update($updateData);
         
         return response()->json([
             'success' => true,
@@ -154,11 +154,7 @@ class PatientController extends Controller
     public function destroy($id)
     {
         $patient = Patient::findOrFail($id);
-        
-        // Hapus semua data monitoring terkait
-        $patient->Monitorings()->delete();
-        
-        // Hapus pasien
+        $patient->monitorings()->delete();
         $patient->delete();
         
         return response()->json([
@@ -176,7 +172,6 @@ class PatientController extends Controller
         $patient = Patient::findOrFail($id);
         $newVolumeMl = round(($request->volume_percent / 100) * $patient->initial_volume);
         
-        // Simpan data monitoring baru
         $monitoring = Monitoring::create([
             'patient_id' => $patient->id,
             'total_drops' => 0,
@@ -195,7 +190,7 @@ class PatientController extends Controller
                 'remaining_percent' => $request->volume_percent,
                 'status' => $monitoring->status
             ]
-        ]);
+        ]); 
     }
 
     private function getStatusByVolume($percent)

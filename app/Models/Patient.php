@@ -27,7 +27,7 @@ class Patient extends Model
     }
 
     // Relasi ke Monitoring
-    public function Monitorings()
+    public function monitorings()
     {
         return $this->hasMany(Monitoring::class);
     }

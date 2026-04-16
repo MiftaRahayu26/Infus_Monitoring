@@ -228,7 +228,7 @@ class DashboardController extends Controller
             'success' => true,
             'message' => 'Data berhasil diterima',
             'data' => [
-                'patient_name' => $patient->name,
+                'patient_name' => $patient->nama,
                 'status' => $status,
                 'remaining_percent' => $remainingPercent
             ]
