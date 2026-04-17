@@ -41,7 +41,7 @@ class PatientController extends Controller
         }
 
         $patient = Patient::create([
-            'name' => $request->name,              
+            'nama' => $request->nama,              
             'patient_id' => $request->patient_id,
             'room' => $request->room ?? '-',
             'bed_number' => $request->bed_number ?? '-',
@@ -95,7 +95,7 @@ class PatientController extends Controller
             'success' => true,
             'data' => [
                 'id' => $patient->id,
-                'name' => $patient->nama,          
+                'nama' => $patient->nama,          
                 'patient_id' => $patient->patient_id,
                 'room' => $patient->room,
                 'bed_number' => $patient->bed_number,
@@ -123,7 +123,7 @@ class PatientController extends Controller
         $patient = Patient::findOrFail($id);
         
         $request->validate([
-            'name' => 'sometimes|string|max:255', 
+            'nama' => 'sometimes|string|max:255', 
             'room' => 'nullable|string|max:50',
             'bed_number' => 'nullable|string|max:10',
             'infusion_type' => 'sometimes|string',

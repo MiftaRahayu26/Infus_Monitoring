@@ -1163,7 +1163,7 @@
             event.preventDefault();
             
             const formData = {
-                name: document.getElementById('name').value,
+                nama: document.getElementById('name').value,
                 patient_id: document.getElementById('patientId').value,
                 room: document.getElementById('room').value,
                 bed_number: document.getElementById('bed').value,
@@ -1176,7 +1176,7 @@
             };
             
             // Validasi
-            if (!formData.name || !formData.patient_id || !formData.initial_volume || !formData.duration_hours) {
+            if (!formData.nama || !formData.patient_id || !formData.initial_volume || !formData.duration_hours) {
                 showAlert('Harap lengkapi data yang wajib diisi', 'error');
                 return;
             }
@@ -1188,8 +1188,10 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'X-Requested-With': 'XMLHttpRequest'
                     },
+                    credentials: 'same-origin',
                     body: JSON.stringify(formData)
                 });
                 
