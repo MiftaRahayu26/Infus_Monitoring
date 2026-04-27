@@ -2,18 +2,25 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\DeviceController;
 
 /*
 |--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "api" middleware group. Make something great!
-|
+| Routes untuk IoT/ESP32 dan external API
+| Routes disini TIDAK menggunakan middleware web (bebas CSRF)
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
+// Endpoint untuk ESP32
+Route::post('/device/data', [DeviceController::class, 'receiveData']);
+Route::post('/device/status/{deviceKey}', [DeviceController::class, 'updateStatus']);
+
+// Endpoint testing koneksi
+Route::get('/ping', function () {
+    return response()->json([
+        'success' => true,
+        'message' => 'API connected',
+        'timestamp' => now()->toDateTimeString()
+    ]);
 });

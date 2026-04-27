@@ -27,7 +27,6 @@ class Monitoring extends Model
         'is_anomaly' => 'boolean',
     ];
 
-    // Relasi ke Patient
     public function patient()
     {
         return $this->belongsTo(Patient::class);

@@ -15,11 +15,15 @@ class Patient extends Model
         'bed_number',
         'infusion_type',
         'initial_volume',
+        'current_volume',        // ✅ Tambah ini
         'drop_factor',
         'duration_hours',
         'target_tpm',
-        'device_key',     
+        'current_tpm',           // ✅ Tambah ini
+        'status',                 // ✅ Tambah ini
+        'device_key',
         'user_id',
+        'last_monitoring_at',    // ✅ Tambah ini
     ];
     public function user()
     {
@@ -38,9 +42,13 @@ class Patient extends Model
         return $this->hasOne(Monitoring::class)->latest('recorded_at');
     }
     
-    // Relasi ke Device (berdasarkan device_key)
-    public function device()
+    public static function findByDeviceKey($deviceKey)
     {
-        return $this->belongsTo(Device::class, 'device_key', 'device_key');
+        return self::where('device_key', $deviceKey)->first();
     }
+    // Relasi ke Device (berdasarkan device_key)
+    // public function device()
+    // {
+    //    return $this->belongsTo(Device::class, 'device_key', 'device_key');
+    // }
 }

@@ -64,10 +64,14 @@ Route::middleware('auth')->group(function () {
 });
 
 // ============================================
-// ROUTE UNTUK ESP32 (TANPA AUTH)
+// ✅ PERBAIKI: ROUTE UNTUK ESP32 (TANPA AUTH & TANPA CSRF)
+// ✅ Tambahkan ->withoutMiddleware(['web']) 
 // ============================================
-Route::post('/api/device/status/{deviceKey}', [DeviceController::class, 'updateStatus']);
-Route::post('/api/device/data', [DeviceController::class, 'receiveData']);
+Route::post('/api/device/status/{deviceKey}', [DeviceController::class, 'updateStatus'])
+    ->withoutMiddleware(['web']);  // ✅ INI PENTING! Menghilangkan CSRF
+
+Route::post('/api/device/data', [DeviceController::class, 'receiveData'])
+    ->withoutMiddleware(['web']);  // ✅ INI PENTING! Menghilangkan CSRF
 
 // ============================================
 // REDIRECT ROOT

@@ -1066,7 +1066,6 @@
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="8" class="text-center py-4">
-                            <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
                             <p class="text-muted">Belum ada data pasien</p>
                             <button class="btn-primary" onclick="openAddModal()">Tambah Pasien</button>
                         </td>
