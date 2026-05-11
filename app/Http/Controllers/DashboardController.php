@@ -16,17 +16,11 @@ class DashboardController extends Controller
         $this->middleware('auth');
     }
 
-    /**
-     * Show dashboard page
-     */
     public function index()
     {
         return view('dashboard');
     }
 
-    /**
-     * Get all monitoring data for dashboard (AJAX)
-     */
     public function getMonitoringData(Request $request)
     {
         $perPage = $request->get('per_page', 10);
@@ -34,22 +28,18 @@ class DashboardController extends Controller
         $room = $request->get('room', 'all');
         $search = $request->get('search', '');
         
-        // Query pasien dengan monitoring terbaru
         $query = Patient::with('latestMonitoring');
         
-        // Filter berdasarkan status
         if ($status !== 'all') {
             $query->whereHas('latestMonitoring', function ($q) use ($status) {
                 $q->where('status', $status);
             });
         }
         
-        // Filter berdasarkan ruang
         if ($room !== 'all') {
             $query->where('room', 'like', "%{$room}%");
         }
         
-        // Filter berdasarkan pencarian
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
@@ -57,18 +47,14 @@ class DashboardController extends Controller
             });
         }
         
-        // Urutkan berdasarkan created_at terbaru
         $query->orderBy('created_at', 'desc');
         
-        // Pagination
         $patients = $query->paginate($perPage);
         
-        // Format data
         $formattedData = [];
         foreach ($patients as $patient) {
             $latestMonitoring = $patient->latestMonitoring;
             
-            // Hitung sisa volume persentase
             $remainingPercent = 100;
             $remainingMl = $patient->initial_volume;
             
@@ -81,7 +67,6 @@ class DashboardController extends Controller
                 if ($remainingPercent > 100) $remainingPercent = 100;
             }
             
-            // Hitung estimasi waktu selesai
             $startTime = $patient->created_at;
             $endTime = $startTime->copy()->addHours($patient->duration_hours);
             $now = now();
@@ -100,8 +85,6 @@ class DashboardController extends Controller
                     $estimatedTimeText = $remainingHours . ' jam ' . $remainingMins . ' menit lagi';
                 }
             }
-            
-            // Tentukan status
             $status = $latestMonitoring->status ?? 'normal';
             
             $formattedData[] = [
@@ -134,19 +117,14 @@ class DashboardController extends Controller
         ]);
     }
 
-    /**
-     * Get statistics for dashboard cards (AJAX)
-     */
     public function getStats()
     {
         $totalPatients = Patient::count();
         
-        // Hitung infus aktif (status bukan empty/stuck)
         $activeInfusions = Patient::whereHas('latestMonitoring', function ($q) {
             $q->whereNotIn('status', ['empty', 'stuck']);
         })->count();
         
-        // Hitung volume rendah (remaining < 20%)
         $lowVolume = 0;
         $patients = Patient::with('latestMonitoring')->get();
         foreach ($patients as $patient) {
@@ -158,8 +136,6 @@ class DashboardController extends Controller
                 }
             }
         }
-        
-        // Hitung anomali (status bukan normal)
         $anomalyCount = Patient::whereHas('latestMonitoring', function ($q) {
             $q->where('status', '!=', 'normal');
         })->count();
@@ -173,10 +149,6 @@ class DashboardController extends Controller
         ]);
     }
 
-    /**
-     * Receive data from ESP32 (IoT endpoint)
-     * Ini akan dipanggil oleh ESP32 untuk mengirim data tetesan
-     */
     public function receiveInfusionData(Request $request)
     {
         $request->validate([
@@ -186,7 +158,6 @@ class DashboardController extends Controller
             'remaining_volume' => 'required|numeric',
         ]);
 
-        // Cari pasien berdasarkan device_key
         $patient = Patient::where('device_key', $request->device_key)->first();
         
         if (!$patient) {
@@ -196,12 +167,10 @@ class DashboardController extends Controller
             ], 404);
         }
 
-        // Hitung persentase sisa volume
         $remainingPercent = round(($request->remaining_volume / $patient->initial_volume) * 100);
         if ($remainingPercent < 0) $remainingPercent = 0;
         if ($remainingPercent > 100) $remainingPercent = 100;
         
-        // Tentukan status berdasarkan volume dan TPM
         $status = 'normal';
         if ($remainingPercent <= 0) {
             $status = 'empty';
@@ -213,7 +182,6 @@ class DashboardController extends Controller
             $status = 'too_slow';
         }
 
-        // Simpan data monitoring
         $monitoring = Monitoring::create([
             'patient_id' => $patient->id,
             'total_drops' => $request->total_drops,
@@ -235,13 +203,8 @@ class DashboardController extends Controller
         ]);
     }
 
-    /**
-     * Update data dari ESP32 (endpoint untuk update volume dan TPM)
-     */
     public function updateData(Request $request)
     {
-        // Endpoint untuk update data dari ESP32
-        // Bisa menggunakan method yang sama dengan receiveInfusionData
         return $this->receiveInfusionData($request);
     }
 }

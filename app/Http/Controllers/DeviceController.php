@@ -6,27 +6,21 @@ use Illuminate\Http\Request;
 use App\Models\Device;
 use App\Models\Patient;
 use App\Models\Monitoring;
+use App\Models\RawDripData;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 
 class DeviceController extends Controller
 {
-    /**
-     * Display a listing of devices.
-     */
     public function index(Request $request)
     {
         $deviceType = $request->get('device_type', 'infus');
-        
         $devices = Device::where('device_type', $deviceType)
                         ->orderBy('created_at', 'desc')
                         ->get();
-        
         return response()->json($devices);
     }
 
-    /**
-     * Store a newly created device.
-     */
     public function store(Request $request)
     {
         $request->validate([
@@ -35,124 +29,70 @@ class DeviceController extends Controller
         ]);
 
         $device = Device::create([
-            'device_key' => $request->device_key,
+            'device_key'  => $request->device_key,
             'device_type' => $request->device_type,
-            'status' => 'offline',
-            'last_seen' => null,
+            'status'      => 'offline',
+            'last_seen'   => null,
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Device berhasil ditambahkan',
-            'device' => $device
+            'device'  => $device
         ], 201);
     }
 
-    /**
-     * Display the specified device.
-     */
     public function show($id)
     {
         $device = Device::findOrFail($id);
-        
-        return response()->json([
-            'success' => true,
-            'device' => $device
-        ]);
+        return response()->json(['success' => true, 'device' => $device]);
     }
 
-    /**
-     * Update the specified device.
-     */
     public function update(Request $request, $id)
     {
         $device = Device::findOrFail($id);
-        
         $request->validate([
-            'device_key' => 'sometimes|string|max:100|unique:devices,device_key,' . $id,
+            'device_key'  => 'sometimes|string|max:100|unique:devices,device_key,' . $id,
             'device_type' => 'sometimes|string|in:suhu,infus',
-            'status' => 'sometimes|string|in:online,offline,error',
+            'status'      => 'sometimes|string|in:online,offline,error',
         ]);
-
-        $device->update($request->only([
-            'device_key', 'device_type', 'status'
-        ]));
-
+        $device->update($request->only(['device_key', 'device_type', 'status']));
         return response()->json([
             'success' => true,
             'message' => 'Device berhasil diupdate',
-            'device' => $device
+            'device'  => $device
         ]);
     }
 
-    /**
-     * Remove the specified device.
-     */
     public function destroy($id)
     {
         $device = Device::findOrFail($id);
-        
-        // Cek apakah device sedang terhubung ke pasien
         $device->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Device berhasil dihapus'
-        ]);
+        return response()->json(['success' => true, 'message' => 'Device berhasil dihapus']);
     }
 
-    /**
-     * ✅ PERBAIKI: Update device status (called by ESP32)
-     */
     public function updateStatus(Request $request, $deviceKey)
     {
-        // ✅ Log data masuk
-        Log::info('ESP32 Status Update', [
-            'device_key' => $deviceKey,
-            'data' => $request->all()
-        ]);
-        
-        $request->validate([
-            'status' => 'required|string|in:online,offline,error',
-        ]);
+        Log::info('ESP32 Status Update', ['device_key' => $deviceKey, 'data' => $request->all()]);
+        $request->validate(['status' => 'required|string|in:online,offline,error']);
 
-        // Cari atau buat device baru
         $device = Device::firstOrCreate(
             ['device_key' => $deviceKey],
-            [
-                'device_type' => 'infus',
-                'status' => $request->status,
-                'last_seen' => now(),
-            ]
+            ['device_type' => 'infus', 'status' => $request->status, 'last_seen' => now()]
         );
-        
-        // Update status
-        $device->update([
-            'status' => $request->status,
-            'last_seen' => now(),
-        ]);
+        $device->update(['status' => $request->status, 'last_seen' => now()]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Status device berhasil diupdate'
-        ]);
+        return response()->json(['success' => true, 'message' => 'Status device berhasil diupdate']);
     }
 
-    /**
-     * Get devices that are not assigned to any patient
-     */
     public function getAvailableDevices()
     {
         $devices = Device::where('device_type', 'infus')
                         ->whereDoesntHave('patient')
                         ->get();
-        
         return response()->json($devices);
     }
 
-    /**
-     * Assign device to patient
-     */
     public function assignToPatient(Request $request)
     {
         $request->validate([
@@ -160,133 +100,239 @@ class DeviceController extends Controller
             'patient_id' => 'required|integer|exists:patients,id',
         ]);
 
-        // Update patient dengan device_key
         $patient = Patient::findOrFail($request->patient_id);
         $patient->device_key = $request->device_key;
         $patient->save();
 
-        // Update device status
         $device = Device::where('device_key', $request->device_key)->first();
-        $device->status = 'online';
-        $device->last_seen = now();
-        $device->save();
+        $device->update(['status' => 'online', 'last_seen' => now()]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Device berhasil diassign ke pasien'
-        ]);
+        return response()->json(['success' => true, 'message' => 'Device berhasil diassign ke pasien']);
     }
 
-    /**
-     * ✅ PERBAIKI: Receive data from ESP32 (IoT endpoint)
-     */
     public function receiveData(Request $request)
     {
-        // ✅ LOG SEMUA DATA MASUK
         Log::info('ESP32 DATA RECEIVED', [
             'all_data' => $request->all(),
-            //'headers' => $request->headers->all(),
-            'ip' => $request->ip(),
-            //'time' => now()->format('Y-m-d H:i:s')
+            'ip'       => $request->ip(),
         ]);
-        
+
         try {
-            // Validasi input
             $request->validate([
-                'device_key' => 'required|string',
-                'total_drops' => 'required|integer|min:0',
-                'current_tpm' => 'required|integer|min:0',
+                'device_key'       => 'required|string',
+                'total_drops'      => 'required|integer|min:0',
+                'current_tpm'      => 'required|integer|min:0',
                 'remaining_volume' => 'required|numeric|min:0',
+                'interval_data'    => 'nullable|array',
+                'mean_interval'    => 'nullable|numeric',
+                'interval_count'   => 'nullable|integer',
+                'status_lokal'     => 'nullable|string',
             ]);
 
-            // ✅ Auto-register device jika belum ada
             $device = Device::firstOrCreate(
                 ['device_key' => $request->device_key],
-                [
-                    'device_type' => 'infus',
-                    'status' => 'online',
-                    'last_seen' => now(),
-                ]
+                ['device_type' => 'infus', 'status' => 'online', 'last_seen' => now()]
             );
-            
-            // Update status device
-            $device->update([
-                'status' => 'online',
-                'last_seen' => now(),
-            ]);
+            $device->update(['status' => 'online', 'last_seen' => now()]);
 
-            // Cari pasien yang terhubung
             $patient = Patient::where('device_key', $request->device_key)->first();
-            
+
             if (!$patient) {
-                // Log::warning('Device belum diassign ke pasien', [
-                //    'device_key' => $request->device_key
-                // ]);
-                
                 return response()->json([
                     'success' => false,
-                    'message' => 'Device belum diassign ke pasien manapun'
+                    'message' => 'Device belum diassign ke pasien manapun. tidak terassign'
                 ], 404);
             }
 
-            // Hitung persentase sisa
             $remainingPercent = 0;
             if ($patient->initial_volume > 0) {
                 $remainingPercent = round(($request->remaining_volume / $patient->initial_volume) * 100);
                 $remainingPercent = max(0, min(100, $remainingPercent));
             }
-            
-            // ✅ Tentukan status
-            $status = 'normal';
+
+            $intervalData  = $request->input('interval_data', []);
+            $intervalCount = count($intervalData);
+
+            $meanInterval = null;
+            $stdInterval  = null;
+
+            if ($intervalCount > 0) {
+                $meanInterval = array_sum($intervalData) / $intervalCount;
+                if ($intervalCount > 1) {
+                    $variance = 0;
+                    foreach ($intervalData as $val) {
+                        $variance += pow($val - $meanInterval, 2);
+                    }
+                    $stdInterval = sqrt($variance / $intervalCount);
+                } else {
+                    $stdInterval = 0;
+                }
+                $meanInterval = round($meanInterval, 4);
+                $stdInterval  = round($stdInterval, 4);
+            }
+
+            $tpmTarget = $patient->target_tpm ?? 0;
+            $status    = 'normal';
+
             if ($remainingPercent <= 0) {
                 $status = 'empty';
-            } elseif ($remainingPercent <= 20) {
+            } elseif ($request->status_lokal === 'stuck') {
                 $status = 'stuck';
-            } elseif ($request->current_tpm > ($patient->target_tpm * 1.5)) {
+            } elseif ($tpmTarget > 0 && $request->current_tpm > ($tpmTarget * 1.15)) {
                 $status = 'too_fast';
-            } elseif ($request->current_tpm > 0 && $request->current_tpm < ($patient->target_tpm * 0.3)) {
+            } elseif ($tpmTarget > 0 && $request->current_tpm > 0
+                      && $request->current_tpm < ($tpmTarget * 0.85)) {
                 $status = 'too_slow';
             }
 
-            // Simpan monitoring
+            $lstmConfidence = null;
+
+            if ($intervalCount > 0) {
+                $lstmResult = $this->panggilLstmApi($intervalData);
+                if ($lstmResult) {
+                    $status         = $this->konversiLabelLstm($lstmResult['kondisi']);
+                    $lstmConfidence = $lstmResult['kepercayaan'] ?? null;
+                    Log::info('LSTM Prediction', [
+                        'kondisi'      => $lstmResult['kondisi'],
+                        'kepercayaan'  => $lstmConfidence,
+                        'status_final' => $status,
+                    ]);
+                } else {
+                    Log::warning('LSTM API tidak merespons, pakai rule-based');
+                }
+            }
+
             $monitoring = Monitoring::create([
-                'patient_id' => $patient->id,
-                'total_drops' => $request->total_drops,
-                'estimated_volume_remaining' => $request->remaining_volume,
-                'current_tpm' => $request->current_tpm,
-                'status' => $status,
-                'is_anomaly' => ($status !== 'normal'),
-                'recorded_at' => now(),
+                'patient_id'                  => $patient->id,
+                'device_id'                   => $device->id,
+                'total_drops'                 => $request->total_drops,
+                'estimated_volume_remaining'  => $request->remaining_volume,
+                'current_tpm'                 => $request->current_tpm,
+                'tpm_target'                  => $tpmTarget,
+                'mean_interval'               => $meanInterval,
+                'std_interval'                => $stdInterval,
+                'interval_data'               => $intervalData,
+                'status'                      => $status,
+                'is_anomaly'                  => ($status !== 'normal'),
+                'lstm_confidence'             => $lstmConfidence,
+                'recorded_at'                 => now(),
             ]);
+
+            if ($intervalCount > 0) {
+                RawDripData::create([
+                    'device_key'    => $request->device_key,
+                    'patient_id'    => $patient->id,
+                    'tpm_target'    => $tpmTarget,
+                    'interval_data' => $intervalData,
+                    'tpm_aktual'    => $request->current_tpm,
+                    'kondisi_label' => 'unknown',
+                    'recorded_at'   => now(),
+                ]);
+
+                Log::info('Raw drip data tersimpan', [
+                    'device_key'     => $request->device_key,
+                    'interval_count' => $intervalCount,
+                    'tpm_aktual'     => $request->current_tpm,
+                ]);
+            }
+
             $patient->update([
-                'current_volume' => $request->remaining_volume,  // ⚠️ Perlu tambah kolom ini!
-                'current_tpm' => $request->current_tpm,
-                'status' => $status,
-                'last_monitoring_at' => now(),
+                'current_volume'      => $request->remaining_volume,
+                'current_tpm'         => $request->current_tpm,
+                'status'              => $status,
+                'last_monitoring_at'  => now(),
             ]);
+
             Log::info('Data monitoring tersimpan', [
-                'patient_id' => $patient->id,
-                'status' => $status,
-                'remaining_percent' => $remainingPercent
+                'patient_id'        => $patient->id,
+                'status'            => $status,
+                'interval_count'    => $intervalCount,
+                'mean_interval'     => $meanInterval,
+                'lstm_confidence'   => $lstmConfidence,
+                'remaining_percent' => $remainingPercent,
             ]);
+
+            $lastRecord = \App\Models\LstmDataset::where('device_key', $request->device_key)
+                ->latest('recorded_at')->first();
+
+            $shouldSave    = !$lastRecord;
+            $intervalDrops = 0;
+
+            if ($lastRecord) {
+                $minutesDiff = $lastRecord->recorded_at->diffInMinutes(now());
+                if ($minutesDiff >= 1) {
+                    $shouldSave    = true;
+                    $intervalDrops = $request->total_drops - $lastRecord->total_drops;
+                }
+            }
+
+            if ($shouldSave) {
+                \App\Models\LstmDataset::create([
+                    'device_key'     => $request->device_key,
+                    'total_drops'    => $request->total_drops,
+                    'current_tpm'    => $request->current_tpm,
+                    'interval_drops' => $intervalDrops,
+                    'status'         => $status,
+                    'label'          => ($status === 'normal') ? 'normal' : 'anomaly',
+                    'recorded_at'    => now(),
+                ]);
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Data berhasil disimpan',
-                'data' => [
-                    'patient_name' => $patient->nama,
-                    'status' => $status,
+                'data'    => [
+                    'patient_name'      => $patient->name,
+                    'status'            => $status,
                     'remaining_percent' => $remainingPercent,
-                    'recorded_at' => $monitoring->recorded_at->format('Y-m-d H:i:s')
+                    'interval_count'    => $intervalCount,
+                    'mean_interval'     => $meanInterval,
+                    'lstm_confidence'   => $lstmConfidence,
+                    'recorded_at'       => $monitoring->recorded_at->format('Y-m-d H:i:s'),
                 ]
             ], 201);
-            
+
         } catch (\Exception $e) {
-        Log::error('Error: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Terjadi kesalahan: ' . $e->getMessage()
-        ], 500);
+            Log::error('Error receiveData: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
     }
-}
+
+    private function panggilLstmApi(array $intervalData): ?array
+    {
+        try {
+            $flaskUrl = env('LSTM_API_URL', 'http://127.0.0.1:5000/predict');
+            $response = Http::timeout(5)->post($flaskUrl, [
+                'interval_data' => $intervalData,
+            ]);
+            if ($response->successful()) {
+                return $response->json();
+            }
+            Log::warning('LSTM API response tidak sukses', [
+                'status' => $response->status(),
+                'body'   => $response->body(),
+            ]);
+            return null;
+        } catch (\Exception $e) {
+            Log::warning('LSTM API tidak bisa dihubungi: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    private function konversiLabelLstm(string $kondisi): string
+    {
+        return match($kondisi) {
+            'normal'         => 'normal',
+            'terlalu_cepat'  => 'too_fast',
+            'terlalu_lambat' => 'too_slow',
+            'macet'          => 'stuck',
+            'habis'          => 'empty',
+            default          => 'normal',
+        };
+    }
 }

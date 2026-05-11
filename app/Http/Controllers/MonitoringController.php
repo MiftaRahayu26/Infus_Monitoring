@@ -8,9 +8,7 @@ use App\Models\Monitoring;
 
 class MonitoringController extends Controller
 {
-    /**
-     * Get all monitoring data with pagination and filters
-     */
+
     public function index(Request $request)
     {
         $perPage = $request->get('per_page', 10);
@@ -18,22 +16,18 @@ class MonitoringController extends Controller
         $room = $request->get('room', 'all');
         $search = $request->get('search', '');
         
-        // Query pasien dengan monitoring terbaru
         $query = Patient::with('latestMonitoring');
         
-        // Filter berdasarkan status
         if ($status !== 'all') {
             $query->whereHas('latestMonitoring', function ($q) use ($status) {
                 $q->where('status', $status);
             });
         }
         
-        // Filter berdasarkan ruang
         if ($room !== 'all') {
             $query->where('room', 'like', "%{$room}%");
         }
         
-        // Filter berdasarkan pencarian nama atau ID pasien
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('nama', 'like', "%{$search}%")
@@ -41,18 +35,14 @@ class MonitoringController extends Controller
             });
         }
         
-        // Urutkan berdasarkan created_at terbaru
         $query->orderBy('created_at', 'desc');
         
-        // Pagination
         $patients = $query->paginate($perPage);
         
-        // Format data untuk frontend
         $formattedData = [];
         foreach ($patients as $patient) {
             $latestMonitoring = $patient->latestMonitoring;
             
-            // Hitung sisa volume persentase
             $remainingPercent = 0;
             $remainingMl = $patient->initial_volume;
             
@@ -63,7 +53,6 @@ class MonitoringController extends Controller
                 if ($remainingPercent > 100) $remainingPercent = 100;
             }
             
-            // Hitung estimasi waktu selesai
             $startTime = $patient->created_at;
             $endTime = $startTime->copy()->addHours($patient->duration_hours);
             $now = now();
@@ -121,8 +110,6 @@ class MonitoringController extends Controller
     public function stats()
     {
         $totalPatients = Patient::count();
-        
-        // Hitung infus aktif (status bukan empty/stuck)
         $activeInfusions = Patient::whereHas('latestMonitoring', function ($q) {
             $q->whereNotIn('status', ['empty', 'stuck']);
         })->count();
@@ -208,11 +195,9 @@ class MonitoringController extends Controller
         
         $patients = $query->get();
         
-        // Buat file CSV
         $filename = 'monitoring_infus_' . date('Y-m-d_His') . '.csv';
         $handle = fopen('php://temp', 'w');
         
-        // Header CSV
         fputcsv($handle, [
             'No', 'Nama Pasien', 'No RM', 'Ruang', 'Bed', 
             'Jenis Infus', 'Volume Awal', 'Sisa Volume', 
@@ -259,10 +244,6 @@ class MonitoringController extends Controller
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
     }
-    
-    /**
-     * Get status badge HTML based on status
-     */
     private function getStatusBadge($status)
     {
         switch ($status) {

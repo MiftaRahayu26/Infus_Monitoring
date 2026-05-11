@@ -1,5 +1,4 @@
 <?php
-// database/migrations/xxxx_xx_xx_add_monitoring_fields_to_patients_table.php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -10,7 +9,6 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('patients', function (Blueprint $table) {
-            // ✅ Tambah kolom untuk data real-time dari ESP32
             $table->decimal('current_volume', 8, 2)->nullable()->after('initial_volume');
             $table->integer('current_tpm')->default(0)->after('target_tpm');
             $table->string('status')->default('normal')->after('current_tpm');

@@ -7,35 +7,19 @@ use App\Http\Controllers\PatientController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\DeviceController;
 
-/*
-|--------------------------------------------------------------------------
-| Web Routes
-|--------------------------------------------------------------------------
-*/
 
-// ============================================
-// ROUTE UNTUK GUEST (BELUM LOGIN)
-// ============================================
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
 });
 
-// ============================================
-// ROUTE UNTUK USER YANG SUDAH LOGIN
-// ============================================
 Route::middleware('auth')->group(function () {
 
-    // Halaman Utama
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-    // ========================================
-    // API ENDPOINTS UNTUK PATIENTS
-    // ========================================
     Route::prefix('api')->group(function () {
         
-        // Patient Management
         Route::get('/patients', [PatientController::class, 'index']);
         Route::get('/patients/{id}', [PatientController::class, 'show']);
         Route::post('/patients', [PatientController::class, 'store']);
@@ -43,13 +27,11 @@ Route::middleware('auth')->group(function () {
         Route::delete('/patients/{id}', [PatientController::class, 'destroy']);
         Route::post('/patients/{id}/update-volume', [PatientController::class, 'updateVolume']);
         
-        // Monitoring Management
         Route::get('/monitoring/data', [MonitoringController::class, 'index']);
         Route::get('/monitoring/stats', [MonitoringController::class, 'stats']);
         Route::get('/monitoring/real-time/{patientId}', [MonitoringController::class, 'getRealTimeData']);
         Route::get('/monitoring/export', [MonitoringController::class, 'export']);
         
-        // Device Management
         Route::get('/devices', [DeviceController::class, 'index']);
         Route::get('/devices/available', [DeviceController::class, 'getAvailableDevices']);
         Route::get('/devices/{id}', [DeviceController::class, 'show']);
@@ -58,27 +40,34 @@ Route::middleware('auth')->group(function () {
         Route::delete('/devices/{id}', [DeviceController::class, 'destroy']);
         Route::post('/devices/assign', [DeviceController::class, 'assignToPatient']);
         
-        // ESP32 IoT Endpoint (tanpa auth, karena dipanggil oleh ESP32)
-        // Route ini akan dipindahkan ke luar middleware auth nanti
     });
 });
 
-// ============================================
-// ✅ PERBAIKI: ROUTE UNTUK ESP32 (TANPA AUTH & TANPA CSRF)
-// ✅ Tambahkan ->withoutMiddleware(['web']) 
-// ============================================
 Route::post('/api/device/status/{deviceKey}', [DeviceController::class, 'updateStatus'])
-    ->withoutMiddleware(['web']);  // ✅ INI PENTING! Menghilangkan CSRF
+    ->withoutMiddleware(['web']);  
 
 Route::post('/api/device/data', [DeviceController::class, 'receiveData'])
-    ->withoutMiddleware(['web']);  // ✅ INI PENTING! Menghilangkan CSRF
+    ->withoutMiddleware(['web']);  
 
-// ============================================
-// REDIRECT ROOT
-// ============================================
 Route::get('/', function () {
     if (auth()->check()) {
         return redirect()->route('dashboard');
     }
     return redirect()->route('login');
 });
+
+Route::get('/api/dataset/export/{deviceKey}', function($deviceKey) {
+    $data = \App\Models\LstmDataset::where('device_key', $deviceKey)
+        ->orderBy('recorded_at', 'asc')
+        ->get();
+    
+    $csv = "recorded_at,total_drops,current_tpm,interval_drops,status,label\n";
+    foreach ($data as $row) {
+        $csv .= "{$row->recorded_at},{$row->total_drops},{$row->current_tpm},{$row->interval_drops},{$row->status},{$row->label}\n";
+    }
+    
+    return response($csv, 200, [
+        'Content-Type' => 'text/csv',
+        'Content-Disposition' => 'attachment; filename="lstm_dataset_'.$deviceKey.'.csv"',
+    ]);
+})->withoutMiddleware(['web', 'auth']);

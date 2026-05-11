@@ -10,7 +10,6 @@ return new class extends Migration
     {
         Schema::table('patients', function (Blueprint $table) {
             $table->string('device_key')->nullable();
-            // Tambahkan index untuk performance
             $table->index('device_key');
         });
     }
