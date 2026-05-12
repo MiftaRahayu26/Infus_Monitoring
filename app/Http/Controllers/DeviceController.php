@@ -171,18 +171,40 @@ class DeviceController extends Controller
                 $stdInterval  = round($stdInterval, 4);
             }
 
+            // GANTI DENGAN INI:
             $tpmTarget = $patient->target_tpm ?? 0;
             $status    = 'normal';
 
             if ($remainingPercent <= 0) {
+                // Volume habis
                 $status = 'empty';
+
             } elseif ($request->status_lokal === 'stuck') {
+                // ESP32 deteksi tidak ada tetes >30 detik
                 $status = 'stuck';
+
+            } elseif ($request->current_tpm === 0 && $remainingPercent > 0) {
+                // Tidak ada tetesan tapi volume masih ada → macet
+                $status = 'stuck';
+
             } elseif ($tpmTarget > 0 && $request->current_tpm > ($tpmTarget * 1.15)) {
+                // TPM aktual jauh di atas target
                 $status = 'too_fast';
-            } elseif ($tpmTarget > 0 && $request->current_tpm > 0
-                      && $request->current_tpm < ($tpmTarget * 0.85)) {
+
+            } elseif ($tpmTarget > 0
+                    && $request->current_tpm > 0
+                    && $request->current_tpm < ($tpmTarget * 0.85)) {
+                // TPM aktual jauh di bawah target
                 $status = 'too_slow';
+
+            } elseif ($tpmTarget > 0 && $meanInterval !== null) {
+                // Cek lebih detail dari pola interval
+                $intervalTarget = 60.0 / $tpmTarget;
+                if ($meanInterval > ($intervalTarget * 1.15)) {
+                    $status = 'too_slow';
+                } elseif ($meanInterval < ($intervalTarget * 0.85)) {
+                    $status = 'too_fast';
+                }
             }
 
             $lstmConfidence = null;
